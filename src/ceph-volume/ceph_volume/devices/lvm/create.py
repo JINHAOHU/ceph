@@ -47,6 +47,9 @@ class Create(object):
 
         Encryption is supported via dmcrypt and the --dmcrypt flag.
 
+        dmcrypt key encryption by KMIP is supported via the --kmip and
+        --kmip-key-id flags.
+
         Existing logical volume (lv):
 
             ceph-volume lvm create --data {vg/lv}

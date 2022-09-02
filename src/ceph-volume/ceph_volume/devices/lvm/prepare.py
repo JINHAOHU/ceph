@@ -276,6 +276,9 @@ class Prepare(object):
         secrets = {'cephx_secret': prepare_utils.create_key()}
         cephx_lockbox_secret = ''
         encrypted = 1 if self.args.dmcrypt else 0
+        kmip_enabled = 1 if self.args.kmip else 0
+        if (kmip_enabled and not self.args.kmip_key_id):
+            raise RuntimeError('KMIP key id must be specified when KMIP is enabled')
         cephx_lockbox_secret = '' if not encrypted else prepare_utils.create_key()
 
         if encrypted:
@@ -288,8 +291,15 @@ class Prepare(object):
         crush_device_class = self.args.crush_device_class
         if crush_device_class:
             secrets['crush_device_class'] = crush_device_class
-        # reuse a given ID if it exists, otherwise create a new ID
-        self.osd_id = prepare_utils.create_id(osd_fsid, json.dumps(secrets), osd_id=self.args.osd_id)
+
+        if kmip_enabled:
+            secrets_with_encrypted_key = secrets.copy()
+            encrypted_key = encryption_utils.encrypt_key(secrets['dmcrypt_key'], self.args.kmip_key_id)
+            secrets_with_encrypted_key['dmcrypt_key'] = encrypted_key
+            self.osd_id = prepare_utils.create_id(osd_fsid, json.dumps(secrets_with_encrypted_key), osd_id=self.args.osd_id)
+        else:
+            # reuse a given ID if it exists, otherwise create a new ID
+            self.osd_id = prepare_utils.create_id(osd_fsid, json.dumps(secrets), osd_id=self.args.osd_id)
         tags = {
             'ceph.osd_fsid': osd_fsid,
             'ceph.osd_id': self.osd_id,
@@ -366,6 +376,7 @@ class Prepare(object):
             tags['ceph.block_uuid'] = block_lv.lv_uuid
             tags['ceph.cephx_lockbox_secret'] = cephx_lockbox_secret
             tags['ceph.encrypted'] = encrypted
+            tags['ceph.kmip_enabled'] = kmip_enabled
             tags['ceph.vdo'] = api.is_vdo(block_lv.lv_path)
 
             wal_device, wal_uuid, tags = self.setup_device(
@@ -405,6 +416,9 @@ class Prepare(object):
         it can later get activated and the OSD daemon can get started.
 
         Encryption is supported via dmcrypt and the --dmcrypt flag.
+
+        dmcrypt key encryption by KMIP is supported via the --kmip and
+        --kmip-key-id flags.
 
         Existing logical volume (lv):
 

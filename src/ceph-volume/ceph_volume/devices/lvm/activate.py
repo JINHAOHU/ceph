@@ -149,6 +149,7 @@ def activate_bluestore(osd_lvs, no_systemd=False, no_tmpfs=False):
         raise RuntimeError('could not find a bluestore OSD to activate')
 
     is_encrypted = osd_block_lv.tags.get('ceph.encrypted', '0') == '1'
+    is_kmip_enabled = osd_block_lv.tags.get('ceph.kmip_enabled', '0') == '1'
     dmcrypt_secret = None
     osd_id = osd_block_lv.tags['ceph.osd_id']
     conf.cluster = osd_block_lv.tags['ceph.cluster_name']
@@ -173,6 +174,8 @@ def activate_bluestore(osd_lvs, no_systemd=False, no_tmpfs=False):
         lockbox_secret = osd_block_lv.tags['ceph.cephx_lockbox_secret']
         encryption_utils.write_lockbox_keyring(osd_id, osd_fsid, lockbox_secret)
         dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+        if is_kmip_enabled:
+            dmcrypt_secret = encryption_utils.decrypt_key(dmcrypt_secret)
         encryption_utils.luks_open(dmcrypt_secret, osd_block_lv.lv_path, osd_block_lv.lv_uuid)
     else:
         osd_lv_path = osd_block_lv.lv_path

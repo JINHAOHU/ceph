@@ -77,6 +77,14 @@ common_args = {
         'action': 'store_true',
         'help': 'Enable device encryption via dm-crypt',
     },
+    '--kmip': {
+        'action': 'store_true',
+        'help': 'Enable dmcrypt key encryption via KMIP, works only when dmcrypt is enabled',
+    },
+    '--kmip-key-id': {
+        'action': 'store_true',
+        'help': 'Specify the ID of the key which is used to encrypt dmcrypt key by KMIP, required when kmip is enabled'
+    },
     '--no-systemd': {
         'dest': 'no_systemd',
         'action': 'store_true',

@@ -1,11 +1,14 @@
 import base64
 import os
 import logging
+import json
 from ceph_volume import process, conf, terminal
 from ceph_volume.util import constants, system
 from ceph_volume.util.device import Device
 from .prepare import write_keyring
 from .disk import lsblk, device_family, get_part_entry_type
+from kmip.pie import client
+from kmip import enums
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
@@ -276,3 +279,37 @@ def legacy_encrypted(device):
             metadata['lockbox'] = d.path
             break
     return metadata
+
+def encrypt_key(dek, kek_id):
+    try:
+        c = client.ProxyKmipClient()
+        with c:
+            cryptographic_parameters = {
+                'block_cipher_mode': enums.BlockCipherMode.GCM,
+                'cryptographic_algorithm': enums.CryptographicAlgorithm.AES,
+                'tag_length': 16,
+            }
+            encrypted_key, iv_counter_nonce = c.encrypt(dek, kek_id, cryptographic_parameters)
+            encrypted_data = {
+                'kek_id': kek_id,
+                'encrypted_key': encrypted_key,
+                'iv_counter_nonce': iv_counter_nonce,
+            }
+            return json.dump(encrypted_data)
+    except ConnectionRefusedError:
+        logger.error('Failed to connect to target KMIP backend')
+        raise
+
+def decrypt_key(encoded_encrypted_data):
+    try:
+        c = client.ProxyKmipClient()
+        with c:
+            cryptographic_parameters = {
+                'block_cipher_mode': enums.BlockCipherMode.GCM,
+                'cryptographic_algorithm': enums.CryptographicAlgorithm.AES,
+            }
+            encrypted_data = json.loads(encoded_encrypted_data)
+            return c.decrypt(encrypted_data['encrypted_key'], encrypted_data['kek_id'], cryptographic_parameters, encrypted_data['iv_counter_nonce'])
+    except ConnectionRefusedError:
+        logger.error('Failed to connect to target KMIP backend')
+        raise

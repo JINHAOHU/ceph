@@ -264,6 +264,16 @@ class Batch(object):
             help='Enable device encryption via dm-crypt',
         )
         parser.add_argument(
+            '--kmip',
+            action='store_true',
+            help='Enable dmcrypt key encryption via KMIP, works only when dmcrypt is enabled',
+        )
+        parser.add_argument(
+            '--kmip-key-id',
+            action='store_true',
+            help='Specify the ID of the key which is used to encrypt dmcrypt key by KMIP, required when kmip is enabled'
+        )
+        parser.add_argument(
             '--crush-device-class',
             dest='crush_device_class',
             help='Crush device class to assign this OSD to',
@@ -440,6 +450,8 @@ class Batch(object):
             'bluestore',
             'filestore',
             'dmcrypt',
+            'kmip',
+            'kmip_key_id',
             'crush_device_class',
             'no_systemd',
         ]
