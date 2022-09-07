@@ -8727,6 +8727,10 @@ std::vector<Option> get_mds_options() {
     .set_default(0)
     .set_description(""),
 
+    Option("mds_inject_health_dummy", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
+
     Option("mds_inject_traceless_reply_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
@@ -9168,6 +9172,8 @@ std::vector<Option> get_mds_client_options() {
     .set_description("confirm access to inode's data pool/namespace described in file layout"),
 
     Option("client_use_faked_inos", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_default(false)
     .set_description(""),
 

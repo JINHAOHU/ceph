@@ -1530,6 +1530,43 @@ class TestSubvolumeGroups(TestVolumesHelper):
         if "_deleting" in subvolgroupnames:
             self.fail("Listing subvolume groups listed '_deleting' directory")
 
+    def test_subvolume_group_ls_filter_internal_directories(self):
+        # tests the 'fs subvolumegroup ls' command filters internal directories
+        # eg: '_deleting', '_nogroup', '_index', "_legacy"
+
+        subvolumegroups = self._generate_random_group_name(3)
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+
+        #create subvolumegroups
+        for groupname in subvolumegroups:
+            self._fs_cmd("subvolumegroup", "create", self.volname, groupname)
+
+        # create subvolume which will create '_nogroup' directory
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # create snapshot
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # clone snapshot which will create '_index' directory
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume which will create '_deleting' directory
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # list subvolumegroups
+        ret = json.loads(self._fs_cmd('subvolumegroup', 'ls', self.volname))
+        self.assertEqual(len(ret), len(subvolumegroups))
+
+        ret_list = [subvolumegroup['name'] for subvolumegroup in ret]
+        self.assertEqual(len(ret_list), len(subvolumegroups))
+
+        self.assertEqual(all(elem in subvolumegroups for elem in ret_list), True)
+
     def test_subvolume_group_ls_for_nonexistent_volume(self):
         # tests the 'fs subvolumegroup ls' command when /volume doesn't exist
         # prerequisite: we expect that the test volume is created and a subvolumegroup is NOT created
@@ -1566,6 +1603,66 @@ class TestSubvolumeGroups(TestVolumesHelper):
             self._fs_cmd("subvolumegroup", "rm", self.volname, group, "--force")
         except CommandFailedError:
             raise RuntimeError("expected the 'fs subvolumegroup rm --force' command to succeed")
+
+    def test_subvolume_group_exists_with_subvolumegroup_and_no_subvolume(self):
+        """Test the presence of any subvolumegroup when only subvolumegroup is present"""
+
+        group = self._generate_random_group_name()
+        # create subvolumegroup
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        ret = self._fs_cmd("subvolumegroup", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "subvolumegroup exists")
+        # delete subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+        ret = self._fs_cmd("subvolumegroup", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "no subvolumegroup exists")
+
+    def test_subvolume_group_exists_with_no_subvolumegroup_and_subvolume(self):
+        """Test the presence of any subvolumegroup when no subvolumegroup is present"""
+
+        ret = self._fs_cmd("subvolumegroup", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "no subvolumegroup exists")
+
+    def test_subvolume_group_exists_with_subvolumegroup_and_subvolume(self):
+        """Test the presence of any subvolume when subvolumegroup
+            and subvolume both are present"""
+
+        group = self._generate_random_group_name()
+        subvolume = self._generate_random_subvolume_name(2)
+        # create subvolumegroup
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        # create subvolume in group
+        self._fs_cmd("subvolume", "create", self.volname, subvolume[0], "--group_name", group)
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume[1])
+        ret = self._fs_cmd("subvolumegroup", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "subvolumegroup exists")
+        # delete subvolume in group
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume[0], "--group_name", group)
+        ret = self._fs_cmd("subvolumegroup", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "subvolumegroup exists")
+        # delete subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume[1])
+        ret = self._fs_cmd("subvolumegroup", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "subvolumegroup exists")
+        # delete subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+        ret = self._fs_cmd("subvolumegroup", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "no subvolumegroup exists")
+
+    def test_subvolume_group_exists_without_subvolumegroup_and_with_subvolume(self):
+        """Test the presence of any subvolume when subvolume is present
+            but no subvolumegroup is present"""
+
+        subvolume = self._generate_random_subvolume_name()
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        ret = self._fs_cmd("subvolumegroup", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "no subvolumegroup exists")
+        # delete subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        ret = self._fs_cmd("subvolumegroup", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "no subvolumegroup exists")
 
 
 class TestSubvolumes(TestVolumesHelper):
@@ -2084,6 +2181,44 @@ class TestSubvolumes(TestVolumesHelper):
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+    def test_subvolume_ls_with_groupname_as_internal_directory(self):
+        # tests the 'fs subvolume ls' command when the default groupname as internal directories
+        # Eg: '_nogroup', '_legacy', '_deleting', '_index'.
+        # Expecting 'fs subvolume ls' will be fail with errno EINVAL for '_legacy', '_deleting', '_index'
+        # Expecting 'fs subvolume ls' will be fail with errno EPERM for '_nogroup'
+
+        # try to list subvolumes providing --group_name=_nogroup option
+        try:
+            self._fs_cmd("subvolume", "ls", self.volname, "--group_name", "_nogroup")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM)
+        else:
+            self.fail("expected the 'fs subvolume ls' command to fail with error 'EPERM' for _nogroup")
+
+        # try to list subvolumes providing --group_name=_legacy option
+        try:
+            self._fs_cmd("subvolume", "ls", self.volname, "--group_name", "_legacy")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL)
+        else:
+            self.fail("expected the 'fs subvolume ls' command to fail with error 'EINVAL' for _legacy")
+
+        # try to list subvolumes providing --group_name=_deleting option
+        try:
+            self._fs_cmd("subvolume", "ls", self.volname, "--group_name", "_deleting")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL)
+        else:
+            self.fail("expected the 'fs subvolume ls' command to fail with error 'EINVAL' for _deleting")
+
+        # try to list subvolumes providing --group_name=_index option
+        try:
+            self._fs_cmd("subvolume", "ls", self.volname, "--group_name", "_index")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL)
+        else:
+            self.fail("expected the 'fs subvolume ls' command to fail with error 'EINVAL' for _index")
 
     def test_subvolume_ls_for_notexistent_default_group(self):
         # tests the 'fs subvolume ls' command when the default group '_nogroup' doesn't exist
@@ -3187,6 +3322,57 @@ class TestSubvolumes(TestVolumesHelper):
             self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--force")
         except CommandFailedError:
             self.fail("expected the 'fs subvolume rm --force' command to succeed")
+
+    def test_subvolume_exists_with_subvolumegroup_and_subvolume(self):
+        """Test the presence of any subvolume by specifying the name of subvolumegroup"""
+
+        group = self._generate_random_group_name()
+        subvolume1 = self._generate_random_subvolume_name()
+        # create subvolumegroup
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        # create subvolume in group
+        self._fs_cmd("subvolume", "create", self.volname, subvolume1, "--group_name", group)
+        ret = self._fs_cmd("subvolume", "exist", self.volname, "--group_name", group)
+        self.assertEqual(ret.strip('\n'), "subvolume exists")
+        # delete subvolume in group
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
+        ret = self._fs_cmd("subvolume", "exist", self.volname, "--group_name", group)
+        self.assertEqual(ret.strip('\n'), "no subvolume exists")
+        # delete subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_exists_with_subvolumegroup_and_no_subvolume(self):
+        """Test the presence of any subvolume specifying the name
+            of subvolumegroup and no subvolumes"""
+
+        group = self._generate_random_group_name()
+        # create subvolumegroup
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        ret = self._fs_cmd("subvolume", "exist", self.volname, "--group_name", group)
+        self.assertEqual(ret.strip('\n'), "no subvolume exists")
+        # delete subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_exists_without_subvolumegroup_and_with_subvolume(self):
+        """Test the presence of any subvolume without specifying the name
+            of subvolumegroup"""
+
+        subvolume1 = self._generate_random_subvolume_name()
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume1)
+        ret = self._fs_cmd("subvolume", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "subvolume exists")
+        # delete subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume1)
+        ret = self._fs_cmd("subvolume", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "no subvolume exists")
+
+    def test_subvolume_exists_without_subvolumegroup_and_without_subvolume(self):
+        """Test the presence of any subvolume without any subvolumegroup
+            and without any subvolume"""
+
+        ret = self._fs_cmd("subvolume", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "no subvolume exists")
 
     def test_subvolume_shrink(self):
         """
