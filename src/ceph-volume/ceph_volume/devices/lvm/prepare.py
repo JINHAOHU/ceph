@@ -276,10 +276,9 @@ class Prepare(object):
         secrets = {'cephx_secret': prepare_utils.create_key()}
         cephx_lockbox_secret = ''
         encrypted = 1 if self.args.dmcrypt else 0
-        kmip_enabled = encrypted
-        # kmip_enabled = 1 if self.args.kmip else 0
-        # if (kmip_enabled and not self.args.kmip_key_id):
-        #     raise RuntimeError('KMIP key id must be specified when KMIP is enabled')
+        kmip_enabled = 1 if self.args.kmip else 0
+        if (kmip_enabled and not self.args.kmip_key_id):
+            raise RuntimeError('KMIP key id must be specified when KMIP is enabled')
         cephx_lockbox_secret = '' if not encrypted else prepare_utils.create_key()
 
         if encrypted:
@@ -295,8 +294,7 @@ class Prepare(object):
 
         if kmip_enabled:
             secrets_with_encrypted_key = secrets.copy()
-            # encrypted_key = encryption_utils.encrypt_key(secrets['dmcrypt_key'], self.args.kmip_key_id)
-            encrypted_key = encryption_utils.encrypt_key(secrets['dmcrypt_key'], '1')
+            encrypted_key = encryption_utils.encrypt_key(secrets['dmcrypt_key'], self.args.kmip_key_id)
             secrets_with_encrypted_key['dmcrypt_key'] = encrypted_key
             self.osd_id = prepare_utils.create_id(osd_fsid, json.dumps(secrets_with_encrypted_key), osd_id=self.args.osd_id)
         else:

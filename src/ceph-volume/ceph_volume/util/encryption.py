@@ -289,16 +289,15 @@ def encrypt_key(dek, kek_id):
                 'cryptographic_algorithm': enums.CryptographicAlgorithm.AES,
                 'tag_length': 16,
             }
-            encrypted_key, iv_counter_nonce = c.encrypt(dek, kek_id, cryptographic_parameters)
+            encrypted_key, iv_counter_nonce = c.encrypt(dek.encode('utf-8'), kek_id, cryptographic_parameters)
             encrypted_data = {
                 'kek_id': kek_id,
                 'encrypted_key': encrypted_key,
                 'iv_counter_nonce': iv_counter_nonce,
             }
-            return json.dump(encrypted_data)
+            return json.dumps(encrypted_data)
     except ConnectionRefusedError:
-        logger.error('Failed to connect to target KMIP backend')
-        raise
+        raise RuntimeError('unable to connect to target KMIP backend')
 
 def decrypt_key(encoded_encrypted_data):
     try:
@@ -311,5 +310,4 @@ def decrypt_key(encoded_encrypted_data):
             encrypted_data = json.loads(encoded_encrypted_data)
             return c.decrypt(encrypted_data['encrypted_key'], encrypted_data['kek_id'], cryptographic_parameters, encrypted_data['iv_counter_nonce'])
     except ConnectionRefusedError:
-        logger.error('Failed to connect to target KMIP backend')
-        raise
+        raise RuntimeError('unable to connect to target KMIP backend')
