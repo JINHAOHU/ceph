@@ -82,8 +82,7 @@ common_args = {
         'help': 'Enable dmcrypt key encryption via KMIP, works only when dmcrypt is enabled',
     },
     '--kmip-key-id': {
-        'action': 'store_true',
-        'help': 'Specify the ID of the key which is used to encrypt dmcrypt key by KMIP, required when kmip is enabled'
+        'help': 'Specify the ID of the key which is used to encrypt dmcrypt key by KMIP, required when kmip is enabled',
     },
     '--no-systemd': {
         'dest': 'no_systemd',
