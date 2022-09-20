@@ -280,26 +280,32 @@ def legacy_encrypted(device):
             break
     return metadata
 
-def encrypt_key(dek, kek_id):
+encoding = 'latin-1'
+def encrypt_by_kmip(data, key_id):
     try:
-        c = client.ProxyKmipClient()
+        c = client.ProxyKmipClient(kmip_version=enums.KMIPVersion.KMIP_1_4)
         with c:
             cryptographic_parameters = {
                 'block_cipher_mode': enums.BlockCipherMode.GCM,
                 'cryptographic_algorithm': enums.CryptographicAlgorithm.AES,
                 'tag_length': 16,
             }
-            encrypted_key, iv_counter_nonce = c.encrypt(dek.encode('utf-8'), kek_id, cryptographic_parameters)
-            encrypted_data = {
-                'kek_id': kek_id,
-                'encrypted_key': encrypted_key,
-                'iv_counter_nonce': iv_counter_nonce,
+            encrypted_data, iv_counter_nonce, auth_tag = c.encrypt(
+                data=data.encode(encoding),
+                uid=key_id,
+                cryptographic_parameters=cryptographic_parameters)
+            encryption_result = {
+                'key_id': key_id,
+                # Decode bytes to string, or json.dumps will fail
+                'encrypted_data': encrypted_data.decode(encoding),
+                'iv_counter_nonce': iv_counter_nonce.decode(encoding),
+                'auth_tag': auth_tag.decode(encoding)
             }
-            return json.dumps(encrypted_data)
+            return json.dumps(encryption_result)
     except ConnectionRefusedError:
         raise RuntimeError('unable to connect to target KMIP backend')
 
-def decrypt_key(encoded_encrypted_data):
+def decrypt_by_kmip(encoded_encryption_result):
     try:
         c = client.ProxyKmipClient()
         with c:
@@ -307,7 +313,13 @@ def decrypt_key(encoded_encrypted_data):
                 'block_cipher_mode': enums.BlockCipherMode.GCM,
                 'cryptographic_algorithm': enums.CryptographicAlgorithm.AES,
             }
-            encrypted_data = json.loads(encoded_encrypted_data)
-            return c.decrypt(encrypted_data['encrypted_key'], encrypted_data['kek_id'], cryptographic_parameters, encrypted_data['iv_counter_nonce'])
+            encryption_result = json.loads(encoded_encryption_result)
+            return c.decrypt(
+                data=encryption_result['encrypted_data'].encode(encoding),
+                uid=encryption_result['key_id'],
+                cryptographic_parameters=cryptographic_parameters,
+                iv_counter_nonce=encryption_result['iv_counter_nonce'].encode(encoding),
+                auth_tag=encryption_result['auth_tag'].encode(encoding),
+            ).decode(encoding)
     except ConnectionRefusedError:
         raise RuntimeError('unable to connect to target KMIP backend')
