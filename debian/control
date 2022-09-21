@@ -406,7 +406,7 @@ Description: debugging symbols for ceph-mon
 Package: ceph-osd
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
-         python3-pykmip
+         python3-pykmip,
          lvm2,
 	 sudo,
          ${misc:Depends},

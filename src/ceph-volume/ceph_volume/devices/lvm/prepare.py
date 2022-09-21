@@ -294,7 +294,7 @@ class Prepare(object):
 
         if kmip_enabled:
             secrets_with_encrypted_key = secrets.copy()
-            encrypted_key = encryption_utils.encrypt_key(secrets['dmcrypt_key'], self.args.kmip_key_id)
+            encrypted_key = encryption_utils.encrypt_by_kmip(secrets['dmcrypt_key'], self.args.kmip_key_id)
             secrets_with_encrypted_key['dmcrypt_key'] = encrypted_key
             self.osd_id = prepare_utils.create_id(osd_fsid, json.dumps(secrets_with_encrypted_key), osd_id=self.args.osd_id)
         else:

@@ -175,7 +175,7 @@ def activate_bluestore(osd_lvs, no_systemd=False, no_tmpfs=False):
         encryption_utils.write_lockbox_keyring(osd_id, osd_fsid, lockbox_secret)
         dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
         if is_kmip_enabled:
-            dmcrypt_secret = encryption_utils.decrypt_key(dmcrypt_secret)
+            dmcrypt_secret = encryption_utils.decrypt_by_kmip(dmcrypt_secret)
         encryption_utils.luks_open(dmcrypt_secret, osd_block_lv.lv_path, osd_block_lv.lv_uuid)
     else:
         osd_lv_path = osd_block_lv.lv_path
